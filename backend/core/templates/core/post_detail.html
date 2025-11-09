@@ -1,0 +1,132 @@
+{% extends 'core/base.html' %}
+
+{% block title %}{{ post.author.username }}'s Post{% endblock %}
+
+{% block content %}
+<a href="{% url 'core:feed' %}" class="inline-flex items-center text-blue-600 hover:text-blue-700 font-semibold mb-4">
+    <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+    </svg>
+    Back to Feed
+</a>
+
+<!-- Post Card -->
+<div class="bg-white rounded-lg shadow-md mb-6 overflow-hidden">
+    <!-- Post Header -->
+    <div class="p-4 flex items-center">
+        <a href="{% url 'core:profile' post.author.username %}">
+            {% if post.author.profile.avatar %}
+                <img src="{{ post.author.profile.avatar.url }}" class="w-12 h-12 rounded-full object-cover">
+            {% else %}
+                <div class="w-12 h-12 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-lg">
+                    {{ post.author.username.0|upper }}
+                </div>
+            {% endif %}
+        </a>
+        <div class="ml-3">
+            <a href="{% url 'core:profile' post.author.username %}" class="font-semibold text-gray-900 hover:text-blue-600">
+                {{ post.author.username }}
+            </a>
+            <p class="text-sm text-gray-500">{{ post.created_at|date:"F d, Y at g:i A" }}</p>
+        </div>
+    </div>
+    
+    <!-- Post Content -->
+    <div class="px-4 pb-3">
+        <p class="text-gray-800 whitespace-pre-wrap text-lg">{{ post.content }}</p>
+    </div>
+    
+    <!-- Post Image -->
+    {% if post.image %}
+    <div class="w-full">
+        <img src="{{ post.image.url }}" class="w-full object-cover" alt="Post image">
+    </div>
+    {% endif %}
+    
+    <!-- Post Stats -->
+    <div class="px-4 py-2 border-t border-gray-200">
+        <span class="text-sm text-gray-600">{{ post.total_likes }} likes</span>
+    </div>
+    
+    <!-- Like Button -->
+    <div class="px-4 py-3 border-t border-gray-200">
+        <button onclick="likePost({{ post.id }})" 
+                id="like-btn"
+                class="w-full py-2 {% if user in post.likes.all %}bg-blue-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %} rounded-lg font-semibold transition-colors">
+            {% if user in post.likes.all %}Liked{% else %}Like{% endif %}
+        </button>
+    </div>
+</div>
+
+<!-- Comments Section -->
+<div class="bg-white rounded-lg shadow-md p-6">
+    <h3 class="text-xl font-bold mb-4">Comments ({{ comments.count }})</h3>
+    
+    <!-- Add Comment Form -->
+    <form method="post" class="mb-6">
+        {% csrf_token %}
+        <div class="flex gap-3">
+            <input type="text" 
+                   name="content" 
+                   placeholder="Add a comment..." 
+                   maxlength="300"
+                   required
+                   class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <button type="submit" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors">
+                Post
+            </button>
+        </div>
+    </form>
+    
+    <!-- Comments List -->
+    <div class="space-y-4">
+        {% for comment in comments %}
+        <div class="flex gap-3 p-3 bg-gray-50 rounded-lg">
+            <a href="{% url 'core:profile' comment.author.username %}">
+                {% if comment.author.profile.avatar %}
+                    <img src="{{ comment.author.profile.avatar.url }}" class="w-10 h-10 rounded-full object-cover">
+                {% else %}
+                    <div class="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold">
+                        {{ comment.author.username.0|upper }}
+                    </div>
+                {% endif %}
+            </a>
+            <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                    <a href="{% url 'core:profile' comment.author.username %}" class="font-semibold text-gray-900 hover:text-blue-600">
+                        {{ comment.author.username }}
+                    </a>
+                    <span class="text-xs text-gray-500">{{ comment.created_at|timesince }} ago</span>
+                </div>
+                <p class="text-gray-800">{{ comment.content }}</p>
+            </div>
+        </div>
+        {% empty %}
+        <p class="text-center text-gray-500 py-8">No comments yet. Be the first to comment!</p>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+function likePost(postId) {
+    fetch(`/post/${postId}/like/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        const btn = document.getElementById('like-btn');
+        if (data.liked) {
+            btn.textContent = 'Liked';
+            btn.className = 'w-full py-2 bg-blue-600 text-white rounded-lg font-semibold transition-colors';
+        } else {
+            btn.textContent = 'Like';
+            btn.className = 'w-full py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg font-semibold transition-colors';
+        }
+        location.reload();
+    });
+}
+</script>
+{% endblock %}

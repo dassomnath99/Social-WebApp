@@ -1,0 +1,141 @@
+{% extends 'core/base.html' %}
+
+{% block title %}{{ profile_user.username }}'s Profile{% endblock %}
+
+{% block content %}
+<!-- Profile Header -->
+<div class="bg-white rounded-lg shadow-md p-8 mb-6">
+    <div class="flex items-start gap-6">
+        <div class="flex-shrink-0">
+            {% if profile.avatar %}
+                <img src="{{ profile.avatar.url }}" class="w-32 h-32 rounded-full object-cover border-4 border-blue-500">
+            {% else %}
+                <div class="w-32 h-32 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-5xl border-4 border-blue-600">
+                    {{ profile_user.username.0|upper }}
+                </div>
+            {% endif %}
+        </div>
+        
+        <div class="flex-1">
+            <div class="flex items-center justify-between mb-4">
+                <h1 class="text-3xl font-bold text-gray-900">{{ profile_user.username }}</h1>
+                
+                {% if user == profile_user %}
+                    <a href="{% url 'core:edit_profile' %}" class="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded-lg transition-colors">
+                        Edit Profile
+                    </a>
+                {% else %}
+                    <div class="flex gap-3">
+                        <button onclick="followUser('{{ profile_user.username }}')" 
+                                id="follow-btn"
+                                class="px-6 py-2 {% if is_following %}bg-gray-200 hover:bg-gray-300 text-gray-800{% else %}bg-blue-600 hover:bg-blue-700 text-white{% endif %} font-semibold rounded-lg transition-colors">
+                            {% if is_following %}Following{% else %}Follow{% endif %}
+                        </button>
+                        <a href="{% url 'core:chat_view' profile_user.username %}" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors">
+                            Message
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+            
+            <!-- Stats -->
+            <div class="flex gap-8 mb-4">
+                <div>
+                    <span class="font-bold text-xl text-gray-900">{{ posts.count }}</span>
+                    <span class="text-gray-600"> posts</span>
+                </div>
+                <div>
+                    <span class="font-bold text-xl text-gray-900">{{ profile.followers.count }}</span>
+                    <span class="text-gray-600"> followers</span>
+                </div>
+                <div>
+                    <span class="font-bold text-xl text-gray-900">{{ profile.following.count }}</span>
+                    <span class="text-gray-600"> following</span>
+                </div>
+            </div>
+            
+            <!-- Bio -->
+            {% if profile.bio %}
+            <p class="text-gray-700 leading-relaxed">{{ profile.bio }}</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- User Posts -->
+<div class="mb-4">
+    <h2 class="text-2xl font-bold text-gray-900 mb-4">Posts</h2>
+</div>
+
+{% for post in posts %}
+<div class="bg-white rounded-lg shadow-md mb-6 overflow-hidden">
+    <!-- Post Header -->
+    <div class="p-4 flex items-center">
+        <a href="{% url 'core:profile' post.author.username %}">
+            {% if post.author.profile.avatar %}
+                <img src="{{ post.author.profile.avatar.url }}" class="w-12 h-12 rounded-full object-cover">
+            {% else %}
+                <div class="w-12 h-12 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-lg">
+                    {{ post.author.username.0|upper }}
+                </div>
+            {% endif %}
+        </a>
+        <div class="ml-3">
+            <p class="font-semibold text-gray-900">{{ post.author.username }}</p>
+            <p class="text-sm text-gray-500">{{ post.created_at|timesince }} ago</p>
+        </div>
+    </div>
+    
+    <!-- Post Content -->
+    <div class="px-4 pb-3">
+        <p class="text-gray-800 whitespace-pre-wrap">{{ post.content }}</p>
+    </div>
+    
+    <!-- Post Image -->
+    {% if post.image %}
+    <div class="w-full">
+        <img src="{{ post.image.url }}" class="w-full object-cover max-h-96" alt="Post image">
+    </div>
+    {% endif %}
+    
+    <!-- Post Stats -->
+    <div class="px-4 py-2 border-t border-gray-200">
+        <span class="text-sm text-gray-600">{{ post.total_likes }} likes • {{ post.comments.count }} comments</span>
+    </div>
+    
+    <!-- Post Actions -->
+    <div class="px-4 py-3 border-t border-gray-200 flex gap-2">
+        <a href="{% url 'core:post_detail' post.id %}" class="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold text-center transition-colors">
+            View Post
+        </a>
+    </div>
+</div>
+{% empty %}
+<div class="bg-white rounded-lg shadow-md p-8 text-center">
+    <p class="text-gray-500 text-lg">No posts yet.</p>
+</div>
+{% endfor %}
+
+<script>
+function followUser(username) {
+    fetch(`/profile/${username}/follow/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        const btn = document.getElementById('follow-btn');
+        if (data.following) {
+            btn.textContent = 'Following';
+            btn.className = 'px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded-lg transition-colors';
+        } else {
+            btn.textContent = 'Follow';
+            btn.className = 'px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors';
+        }
+        location.reload();
+    });
+}
+</script>
+{% endblock %}

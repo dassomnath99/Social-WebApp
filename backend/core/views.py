@@ -1,9 +1,9 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth import login
+from django.contrib.auth import login, logout
 from django.contrib.auth.models import User
 from django.http import JsonResponse
-from django.db.models import Q, Count, Max
+from django.db.models import Q
 from django.utils import timezone
 from .models import Post, Comment, Profile, Conversation, Message
 from .forms import SignUpForm, PostForm, CommentForm, ProfileForm
@@ -15,13 +15,15 @@ def signup(request):
             user = form.save()
             Profile.objects.create(user=user)
             login(request, user)
-            return redirect("feed")
+            return redirect("core:feed")
     else:
         form = SignUpForm()
+        return render(request, 'core/signup.html',{
+            'form':form,
+        })
     return render(request, 'core/signup.html',{
         'form':form,
     })
-
 @login_required
 def feed(request):
     if request.method == 'POST':
@@ -30,7 +32,7 @@ def feed(request):
             post = form.save(commit=False)
             post.author = request.user
             post.save()
-            return redirect('feed')
+            return redirect('core:feed')
     else:
         form = PostForm()
     
@@ -43,6 +45,14 @@ def feed(request):
         'form':form,
         'posts':posts
     })
+
+
+def logout_view(request):
+    # Ensure the user is logged out and an HttpResponse (redirect) is always returned.
+    logout(request)
+    return redirect('core:signup')
+
+
 
 @login_required
 def post_detail(request, pk):
@@ -87,6 +97,8 @@ def profile(request, username):
     posts = user.posts.all()
     is_following = request.user.profile.following.filter(user=user).exists()
 
+    
+
     return render(request,'core/profile.html',{
         'profile_user':user,
         'profile':profile,
@@ -101,7 +113,7 @@ def edit_profile(request):
         form = ProfileForm(request.POST, request.FILES, instance=profile)
         if form.is_valid():
             form.save()
-            return redirect('profile',username=request.user.username)
+            return redirect('core:profile', username=request.user.username)
     else:
         form = ProfileForm(instance=profile)
     

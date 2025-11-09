@@ -1,0 +1,286 @@
+{% extends 'base.html' %}
+
+{% block title %}Chat with {{ other_user.username }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <!-- Chat Header -->
+    <div class="bg-white rounded-t-lg shadow-sm p-4 flex items-center justify-between sticky top-16 z-40">
+        <div class="flex items-center gap-3">
+            <a href="{% url 'core:messages_list' %}" 
+               class="text-blue-600 hover:text-blue-700 transition-colors">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                </svg>
+            </a>
+            
+            {% if other_user.profile.avatar %}
+                <img src="{{ other_user.profile.avatar.url }}" 
+                     class="w-12 h-12 rounded-full object-cover">
+            {% else %}
+                <div class="w-12 h-12 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-lg">
+                    {{ other_user.username.0|upper }}
+                </div>
+            {% endif %}
+            
+            <div>
+                <div class="font-semibold text-gray-900">{{ other_user.username }}</div>
+                <div id="user-status" class="text-sm">
+                    {% if other_user.profile.is_online %}
+                        <span class="text-green-600 font-medium">● Active now</span>
+                    {% else %}
+                        <span class="text-gray-500">Offline</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <a href="{% url 'core:profile' other_user.username %}" 
+           class="text-blue-600 hover:text-blue-700 font-semibold transition-colors">
+            View Profile
+        </a>
+    </div>
+    
+    <!-- Messages Container -->
+    <div class="bg-white overflow-y-auto p-5 flex flex-col space-y-4" 
+         id="chat-messages"
+         style="height: 500px;">
+        {% for message in messages %}
+        <div class="flex animate-fade-in {% if message.sender == request.user %}justify-end{% endif %}" 
+             data-message-id="{{ message.id }}">
+            <div class="max-w-[70%] {% if message.sender == request.user %}bg-blue-500 text-white{% else %}bg-gray-100 text-gray-900{% endif %} rounded-2xl px-4 py-2 shadow-sm">
+                <p class="break-words">{{ message.content }}</p>
+                <div class="flex items-center justify-end gap-1 mt-1">
+                    <span class="text-xs {% if message.sender == request.user %}text-blue-100{% else %}text-gray-500{% endif %}">
+                        {{ message.timestamp|date:"g:i A" }}
+                    </span>
+                    {% if message.sender == request.user and message.is_read %}
+                        <span class="text-xs text-blue-200">✓✓</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <!-- Typing Indicator -->
+    <div id="typing-indicator" 
+         class="hidden bg-white px-5 py-2 text-gray-600 text-sm italic">
+        <span id="typing-username"></span> is typing...
+    </div>
+    
+    <!-- Message Input -->
+    <div class="bg-white rounded-b-lg shadow-sm p-4 flex gap-3">
+        <input type="text" 
+               class="flex-1 px-4 py-3 border border-gray-300 rounded-full outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+               id="message-input" 
+               placeholder="Type a message..." 
+               autocomplete="off"
+               maxlength="2000">
+        <button class="bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-full font-semibold disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors shadow-sm hover:shadow" 
+                id="send-btn" 
+                onclick="sendMessage()">
+            Send
+        </button>
+    </div>
+</div>
+
+<style>
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+    animation: fade-in 0.3s ease-out;
+}
+</style>
+
+<script>
+    const otherUsername = "{{ other_user.username }}";
+    const currentUsername = "{{ request.user.username }}";
+    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const wsUrl = protocol + window.location.host + '/ws/chat/' + otherUsername + '/';
+    
+    let chatSocket = new WebSocket(wsUrl);
+    let typingTimer;
+    let isTyping = false;
+    
+    chatSocket.onopen = function(e) {
+        console.log('WebSocket connection established');
+    };
+    
+    chatSocket.onmessage = function(e) {
+        const data = JSON.parse(e.data);
+        
+        if (data.type === 'message') {
+            addMessage(data.message, data.sender, data.timestamp, data.message_id);
+            
+            if (data.sender !== currentUsername) {
+                markAsRead(data.message_id);
+            }
+        } 
+        else if (data.type === 'typing') {
+            showTypingIndicator(data.username, data.is_typing);
+        }
+        else if (data.type === 'status') {
+            updateUserStatus(data.username, data.is_online);
+        }
+        else if (data.type === 'read') {
+            updateReadReceipt(data.message_id);
+        }
+    };
+    
+    chatSocket.onerror = function(e) {
+        console.error('WebSocket error:', e);
+    };
+    
+    chatSocket.onclose = function(e) {
+        console.log('WebSocket connection closed');
+        setTimeout(function() {
+            console.log('Attempting to reconnect...');
+            location.reload();
+        }, 3000);
+    };
+    
+    function sendMessage() {
+        const messageInput = document.getElementById('message-input');
+        const message = messageInput.value.trim();
+        
+        if (message && chatSocket.readyState === WebSocket.OPEN) {
+            chatSocket.send(JSON.stringify({
+                'type': 'message',
+                'message': message
+            }));
+            messageInput.value = '';
+            stopTyping();
+        }
+    }
+    
+    function addMessage(content, sender, timestamp, messageId) {
+        const messagesDiv = document.getElementById('chat-messages');
+        const isSent = sender === currentUsername;
+        
+        const messageWrapper = document.createElement('div');
+        messageWrapper.className = 'flex animate-fade-in ' + (isSent ? 'justify-end' : '');
+        messageWrapper.setAttribute('data-message-id', messageId);
+        
+        const time = new Date(timestamp).toLocaleTimeString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit' 
+        });
+        
+        const bgColor = isSent ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-900';
+        const timeColor = isSent ? 'text-blue-100' : 'text-gray-500';
+        
+        messageWrapper.innerHTML = `
+            <div class="max-w-[70%] ${bgColor} rounded-2xl px-4 py-2 shadow-sm">
+                <p class="break-words">${escapeHtml(content)}</p>
+                <div class="flex items-center justify-end gap-1 mt-1">
+                    <span class="text-xs ${timeColor}">${time}</span>
+                </div>
+            </div>
+        `;
+        
+        messagesDiv.appendChild(messageWrapper);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+    
+    function markAsRead(messageId) {
+        if (chatSocket.readyState === WebSocket.OPEN) {
+            chatSocket.send(JSON.stringify({
+                'type': 'read',
+                'message_id': messageId
+            }));
+        }
+    }
+    
+    function updateReadReceipt(messageId) {
+        const messageWrapper = document.querySelector(`[data-message-id="${messageId}"]`);
+        if (messageWrapper) {
+            const timeDiv = messageWrapper.querySelector('div > div');
+            if (timeDiv && !timeDiv.querySelector('.read-check')) {
+                const checkmark = document.createElement('span');
+                checkmark.className = 'text-xs text-blue-200 read-check';
+                checkmark.textContent = '✓✓';
+                timeDiv.appendChild(checkmark);
+            }
+        }
+    }
+    
+    function showTypingIndicator(username, isTyping) {
+        const indicator = document.getElementById('typing-indicator');
+        const usernameSpan = document.getElementById('typing-username');
+        
+        if (isTyping && username !== currentUsername) {
+            usernameSpan.textContent = username;
+            indicator.classList.remove('hidden');
+        } else {
+            indicator.classList.add('hidden');
+        }
+    }
+    
+    function updateUserStatus(username, isOnline) {
+        const statusDiv = document.getElementById('user-status');
+        if (username === otherUsername) {
+            statusDiv.innerHTML = isOnline 
+                ? '<span class="text-green-600 font-medium">● Active now</span>'
+                : '<span class="text-gray-500">Offline</span>';
+        }
+    }
+    
+    function startTyping() {
+        if (!isTyping && chatSocket.readyState === WebSocket.OPEN) {
+            isTyping = true;
+            chatSocket.send(JSON.stringify({
+                'type': 'typing',
+                'is_typing': true
+            }));
+        }
+    }
+    
+    function stopTyping() {
+        if (isTyping && chatSocket.readyState === WebSocket.OPEN) {
+            isTyping = false;
+            chatSocket.send(JSON.stringify({
+                'type': 'typing',
+                'is_typing': false
+            }));
+        }
+    }
+    
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // Event listeners
+    document.getElementById('message-input').addEventListener('input', function() {
+        startTyping();
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(stopTyping, 1000);
+    });
+    
+    document.getElementById('message-input').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+    
+    // Auto-scroll to bottom on load
+    const messagesDiv = document.getElementById('chat-messages');
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    
+    // Mark unread messages as read
+    window.addEventListener('load', function() {
+        const messages = messagesDiv.querySelectorAll('[data-message-id]');
+        messages.forEach(msg => {
+            if (!msg.classList.contains('justify-end')) {
+                const messageId = msg.getAttribute('data-message-id');
+                if (messageId) markAsRead(messageId);
+            }
+        });
+    });
+</script>
+{% endblock %}

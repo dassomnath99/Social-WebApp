@@ -1,0 +1,111 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Messages{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-lg shadow-md p-6">
+    <h2 class="text-2xl font-bold mb-6">Messages</h2>
+    
+    <!-- Search Users -->
+    <div class="mb-6">
+        <input type="text" 
+               id="user-search" 
+               placeholder="Search users to start a chat..." 
+               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <div id="search-results" class="mt-2"></div>
+    </div>
+    
+    <!-- Conversations List -->
+    <div class="divide-y divide-gray-200">
+        {% for item in conversations %}
+        <a href="{% url 'core:chat_view' item.other_user.username %}" 
+           class="block p-4 hover:bg-gray-50 transition-colors rounded-lg">
+            <div class="flex items-center">
+                <!-- Avatar -->
+                {% if item.other_user.profile.avatar %}
+                    <img src="{{ item.other_user.profile.avatar.url }}" 
+                         class="w-14 h-14 rounded-full object-cover flex-shrink-0">
+                {% else %}
+                    <div class="w-14 h-14 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-xl flex-shrink-0">
+                        {{ item.other_user.username.0|upper }}
+                    </div>
+                {% endif %}
+                
+                <!-- Conversation Info -->
+                <div class="flex-1 ml-4 min-w-0">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="font-semibold text-gray-900 truncate">{{ item.other_user.username }}</span>
+                        {% if item.other_user.profile.is_online %}
+                            <span class="text-green-600 text-sm font-medium ml-2 flex-shrink-0">● Online</span>
+                        {% endif %}
+                    </div>
+                    
+                    {% if item.last_message %}
+                        <p class="text-gray-500 text-sm truncate">
+                            {{ item.last_message.content|truncatewords:8 }}
+                        </p>
+                    {% endif %}
+                </div>
+                
+                <!-- Unread Badge -->
+                {% if item.unread_count > 0 %}
+                    <div class="bg-blue-500 text-white rounded-full w-7 h-7 flex items-center justify-center text-xs font-bold ml-3 flex-shrink-0">
+                        {{ item.unread_count }}
+                    </div>
+                {% endif %}
+            </div>
+        </a>
+        {% empty %}
+        <div class="text-center py-12">
+            <svg class="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+            </svg>
+            <p class="text-gray-500 text-lg">No conversations yet</p>
+            <p class="text-gray-400 text-sm mt-2">Search for a user above to start chatting!</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+let searchTimeout;
+document.getElementById('user-search').addEventListener('input', function(e) {
+    clearTimeout(searchTimeout);
+    const query = e.target.value.trim();
+    
+    if (query.length < 2) {
+        document.getElementById('search-results').innerHTML = '';
+        return;
+    }
+    
+    searchTimeout = setTimeout(() => {
+        fetch(`/api/search-users/?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+                const resultsDiv = document.getElementById('search-results');
+                if (data.users.length === 0) {
+                    resultsDiv.innerHTML = '<div class="p-3 text-gray-500 text-center bg-gray-50 rounded-lg">No users found</div>';
+                    return;
+                }
+                
+                resultsDiv.innerHTML = '<div class="border border-gray-200 rounded-lg divide-y divide-gray-200 mt-2">' + 
+                    data.users.map(user => `
+                        <a href="/messages/${user.username}/" 
+                           class="flex items-center justify-between p-3 hover:bg-gray-50 transition-colors">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold">
+                                    ${user.username[0].toUpperCase()}
+                                </div>
+                                <span class="font-semibold text-gray-900">${user.username}</span>
+                            </div>
+                            ${user.is_online ? '<span class="text-green-600 text-sm font-medium">● Online</span>' : ''}
+                        </a>
+                    `).join('') + '</div>';
+            })
+            .catch(error => {
+                console.error('Search error:', error);
+            });
+    }, 300);
+});
+</script>
+{% endblock %}
