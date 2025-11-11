@@ -7,7 +7,7 @@ app_name = "core"
 urlpatterns = [
     path('',views.feed, name='feed'),
     path('signup/',views.signup, name='signup'),
-    path('accounts/login/', auth_views.LoginView.as_view(template_name='core/login.html', next_page='core:feed'), name='login'),
+    path('login/', auth_views.LoginView.as_view(template_name='core/login.html', next_page='core:feed'), name='login'),
     path('logout/',views.logout_view, name='logout'),
     path('post/<int:pk>/',views.post_detail, name='post_detail'),
     path('post/<int:pk>/like',views.like_post, name='like_post'),

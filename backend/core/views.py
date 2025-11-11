@@ -7,6 +7,7 @@ from django.db.models import Q
 from django.utils import timezone
 from .models import Post, Comment, Profile, Conversation, Message
 from .forms import SignUpForm, PostForm, CommentForm, ProfileForm
+from django.views.decorators.http import require_POST
 
 def signup(request):
     if request.method == 'POST':
@@ -24,8 +25,10 @@ def signup(request):
     return render(request, 'core/signup.html',{
         'form':form,
     })
-@login_required
+
 def feed(request):
+    if request.user.is_authenticated is False:
+        return redirect('core:signup')
     if request.method == 'POST':
         form = PostForm(request.POST, request.FILES)
         if form.is_valid():
@@ -69,7 +72,10 @@ def post_detail(request, pk):
             return redirect('post_detail',pk=pk)
     else:
         form = CommentForm()
-    
+        return render(request, 'core/post_detail.html',{
+            'post':post, 'comments':comments, 'form':form
+        })
+
     return render(request, 'core/post_detail.html',{
         'post':post, 'comments':comments, 'form':form
     })
@@ -77,16 +83,20 @@ def post_detail(request, pk):
 @login_required
 def like_post(request, pk):
     post = get_object_or_404(Post, pk=pk)
+    
+    # Optional: Check if user can interact with this post
+    # (e.g., not blocked, post is visible, etc.)
+    
     if request.user in post.likes.all():
-        post.likes.remove()
+        post.likes.remove(request.user)
         liked = False
     else:
         post.likes.add(request.user)
         liked = True
     
     return JsonResponse({
-        'liked':liked,
-        'total_likes':post.total_likes(),
+        'liked': liked,
+        'total_likes': post.total_likes(),
     })
 
 
@@ -176,7 +186,17 @@ def chat_view(request, username):
 
     unread_messages = messages.filter(is_read=False).exclude(sender=request.user)
     for message in unread_messages:
-        message.mark_as_read()
+        @require_POST
+        @login_required
+        def like_post(request, pk):
+            post = get_object_or_404(Post, pk=pk)
+            if request.user in post.likes.all():
+                post.likes.remove(request.user)
+                liked = False
+            else:
+                post.likes.add(request.user)
+                liked = True
+            return JsonResponse({'liked': liked, 'total_likes': post.total_likes()})
     return render(request, 'core/chat.html',{
         'other_user':other_user,
         'conversation':conversation,

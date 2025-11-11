@@ -74,9 +74,12 @@
     <!-- Post Actions -->
     <div class="px-4 py-3 border-t border-gray-200 flex gap-2">
         <button onclick="likePost({{ post.id }})" 
-                id="like-btn-{{ post.id }}"
-                class="flex-1 py-2 {% if user in post.likes.all %}bg-blue-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %} rounded-lg font-semibold transition-colors">
-            {% if user in post.likes.all %}Liked{% else %}Like{% endif %}
+        id="like-btn-{{ post.id }}"
+        class="flex-1 py-2 {% if user in post.likes.all %}bg-blue-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %} rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
+        id="like-btn-{{ post.id }}">
+            <span id="like-text-{{ post.id }}">
+                {% if user in post.likes.all %}Liked{% else %}Like{% endif %}
+            </span>
         </button>
         <a href="{% url 'core:post_detail' post.id %}" class="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold text-center transition-colors">
             Comment
@@ -91,22 +94,51 @@
 
 <script>
 function likePost(postId) {
+    const btn = document.getElementById(`like-btn-${postId}`);
+    const likeText = document.getElementById(`like-text-${postId}`);
+    const originalText = likeText.textContent;
+    
+    // Show loading state
+    likeText.textContent = '...';
+    btn.disabled = true;
+    
     fetch(`/post/${postId}/like/`, {
         method: 'POST',
         headers: {
-            'X-CSRFToken': '{{ csrf_token }}'
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json',
         }
     })
-    .then(response => response.json())
-    .then(data => {
-        const btn = document.getElementById(`like-btn-${postId}`);
-        if (data.liked) {
-            btn.textContent = 'Liked';
-            btn.className = 'flex-1 py-2 bg-blue-600 text-white rounded-lg font-semibold transition-colors';
-        } else {
-            btn.textContent = 'Like';
-            btn.className = 'flex-1 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg font-semibold transition-colors';
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
         }
+        return response.json();
+    })
+    .then(data => {
+        if (data.liked) {
+            likeText.textContent = 'Liked';
+            btn.className = 'flex-1 py-2 bg-blue-600 text-white rounded-lg font-semibold transition-colors flex items-center justify-center gap-2';
+        } else {
+            likeText.textContent = 'Like';
+            btn.className = 'flex-1 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2';
+        }
+        
+        // Update like count in stats section
+        const statsElement = btn.closest('.bg-white').querySelector('.text-sm.text-gray-600');
+        if (statsElement) {
+            const currentText = statsElement.textContent;
+            const newText = currentText.replace(/\d+ likes/, `${data.total_likes} likes`);
+            statsElement.textContent = newText;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        likeText.textContent = originalText; // Revert on error
+        alert('Error liking post. Please try again.');
+    })
+    .finally(() => {
+        btn.disabled = false;
     });
 }
 </script>
